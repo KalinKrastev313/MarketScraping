@@ -12,39 +12,21 @@ class BrspiderSpider(scrapy.Spider):
     counter = 0
 
     def parse(self, response):
-        # yield from self.parse_search_results_page(response)
-        yield self.parse_search_results_page(response)
-        # last_page_number = int(response.css(".pagination_anchor:last-child::text").get().strip())
+        yield from self.parse_search_results_page(response)
         last_page_number = int(response.css("body > app-root > brico-storefront > main > cx-page-layout.BricolageSpaListPageTemplate > cx-page-slot.BricoListContainerSlot.has-components > brico-listpage > brico-plp > div.plp-content > div > div:nth-child(4) > div > brico-pagination > nav > ul > li:nth-child(6) > a::text").get().strip())
-        # import pdb; pdb.set_trace()
         for page_number in range(1, last_page_number + 1):
             print(f"This is the page number {page_number}")
             next_page_url = self.start_urls[0] + '?currentPage=' + str(page_number)
             yield response.follow(next_page_url, callback=self.parse_search_results_page)
-        # if self.counter == 1:
-        # import pdb; pdb.set_trace()
-        # self.counter += 1
-        # if next_page_url:
-        #     yield response.follow(next_page_url, callback=self.parse)
 
     def parse_search_results_page(self, response):
         products = response.css(".product__title")
 
         for product in products:
-            # self.counter += 1
-            # if self.counter == 20:
-            #     break
             relative_url = product.css("a::attr(href)").get()
             yield response.follow(relative_url, callback=self.parse_product_page)
-            # self.parse_product_page(response, relative_url)
-            # yield {
-            #     "title": product.css("a::text").get(),
-            #     "url": relative_url
-            # }
 
     def parse_product_page(self, response):
-        # import pdb; pdb.set_trace()
-
         title = response.css("brico-pdp-title h1::text").get()
         image_dict = self.get_images_urls_dict(response)
         table_values = self.extract_table_data(response)
@@ -53,7 +35,6 @@ class BrspiderSpider(scrapy.Spider):
 
         title = self.ensure_brand_in_the_title(title, table_values)
         product_code = re.search(r"\d+$", response.url).group()
-        # storage_data = self.get_stores_storage(product_code)
 
         item = {
             "title": title,
@@ -62,7 +43,6 @@ class BrspiderSpider(scrapy.Spider):
             "rating": rating,
             **image_dict,
             **table_values,
-            # "storage_data": self.get_stores_storage(product_code)
         }
 
         yield scrapy.Request(
@@ -106,17 +86,6 @@ class BrspiderSpider(scrapy.Spider):
 
     def build_storage_url(self, product_code):
         return f"https://api.mr-bricolage.bg/occ/v2/bricolage-spa/products/{product_code}/stock?fields=stores(name,displayName,address(streetname,streetnumber,town),stockInfo(FULL))&longitude=0&latitude=0"
-
-    # def get_stores_storage(self, product_code):
-
-
-        # api_url = f"https://api.mr-bricolage.bg/occ/v2/bricolage-spa/products/{product_code}/stock?fields=stores(name,displayName,address(streetname,streetnumber,town),stockInfo(FULL))&longitude=0&latitude=0"
-
-        # import pdb; pdb.set_trace()
-        # yield scrapy.Request(
-        #     url=api_url,
-        #     callback=self.__parse_storage_data_json
-        # )
 
     def __parse_storage_data_json(self, response):
         def __get_store_tuple_text_summary(store_tuple: StorageData):
