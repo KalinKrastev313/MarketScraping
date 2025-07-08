@@ -1,5 +1,8 @@
 import scrapy
 import re
+from collections import namedtuple
+
+StorageData = namedtuple('StorageData', ['Name', 'Street', 'Number', 'Amount'])
 
 
 class BrspiderSpider(scrapy.Spider):
@@ -9,10 +12,15 @@ class BrspiderSpider(scrapy.Spider):
     counter = 0
 
     def parse(self, response):
-        yield from self.parse_search_results_page(response)
-        # for page_number in range(1, 8):
-        #     next_page_url = self.start_urls[0] + '?currentPage=' + str(page_number)
-        #     yield response.follow(next_page_url, callback=self.parse_search_results_page)
+        # yield from self.parse_search_results_page(response)
+        yield self.parse_search_results_page(response)
+        # last_page_number = int(response.css(".pagination_anchor:last-child::text").get().strip())
+        last_page_number = int(response.css("body > app-root > brico-storefront > main > cx-page-layout.BricolageSpaListPageTemplate > cx-page-slot.BricoListContainerSlot.has-components > brico-listpage > brico-plp > div.plp-content > div > div:nth-child(4) > div > brico-pagination > nav > ul > li:nth-child(6) > a::text").get().strip())
+        # import pdb; pdb.set_trace()
+        for page_number in range(1, last_page_number + 1):
+            print(f"This is the page number {page_number}")
+            next_page_url = self.start_urls[0] + '?currentPage=' + str(page_number)
+            yield response.follow(next_page_url, callback=self.parse_search_results_page)
         # if self.counter == 1:
         # import pdb; pdb.set_trace()
         # self.counter += 1
@@ -23,9 +31,9 @@ class BrspiderSpider(scrapy.Spider):
         products = response.css(".product__title")
 
         for product in products:
-            self.counter += 1
-            if self.counter == 20:
-                break
+            # self.counter += 1
+            # if self.counter == 20:
+            #     break
             relative_url = product.css("a::attr(href)").get()
             yield response.follow(relative_url, callback=self.parse_product_page)
             # self.parse_product_page(response, relative_url)
@@ -45,18 +53,27 @@ class BrspiderSpider(scrapy.Spider):
 
         title = self.ensure_brand_in_the_title(title, table_values)
         product_code = re.search(r"\d+$", response.url).group()
-        storage_data = self.get_stores_storage(product_code)
+        # storage_data = self.get_stores_storage(product_code)
 
-
-        yield {
+        item = {
             "title": title,
             "url": response.url,
             "price": price,
             "rating": rating,
             **image_dict,
             **table_values,
-            "storage_data": self.get_stores_storage(product_code)
+            # "storage_data": self.get_stores_storage(product_code)
         }
+
+        yield scrapy.Request(
+            url=self.build_storage_url(product_code),
+            callback=self.__parse_storage_data_json,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "Mozilla/5.0",
+            },
+            meta={"item": item}
+        )
 
     def get_images_urls_dict(self, response):
         image_urls = response.css(".swiper-slide img::attr(src)").getall()
@@ -87,18 +104,36 @@ class BrspiderSpider(scrapy.Spider):
                 title = f"[{table_values['Марка']}] {title}"
         return title
 
-    def get_stores_storage(self, product_code):
+    def build_storage_url(self, product_code):
+        return f"https://api.mr-bricolage.bg/occ/v2/bricolage-spa/products/{product_code}/stock?fields=stores(name,displayName,address(streetname,streetnumber,town),stockInfo(FULL))&longitude=0&latitude=0"
+
+    # def get_stores_storage(self, product_code):
 
 
-        api_url = f"https://api.mr-bricolage.bg/occ/v2/bricolage-spa/products/{product_code}/stock?fields=stores(name,displayName,address(streetname,streetnumber,town),stockInfo(FULL))&longitude=0&latitude=0"
+        # api_url = f"https://api.mr-bricolage.bg/occ/v2/bricolage-spa/products/{product_code}/stock?fields=stores(name,displayName,address(streetname,streetnumber,town),stockInfo(FULL))&longitude=0&latitude=0"
 
         # import pdb; pdb.set_trace()
-        yield scrapy.Request(
-            url=api_url,
-            callback=self.__parse_storage_data_json
-        )
+        # yield scrapy.Request(
+        #     url=api_url,
+        #     callback=self.__parse_storage_data_json
+        # )
 
     def __parse_storage_data_json(self, response):
+        def __get_store_tuple_text_summary(store_tuple: StorageData):
+            return f"Магазин {store_tuple.Name} на адрес {store_tuple.Street} №{store_tuple.Number} има наличност {store_tuple.Amount} продукта"
+        item = response.meta["item"]
+        # import pdb; pdb.set_trace()
+        stores_summarized_data = []
         data = response.json()
-        import pdb; pdb.set_trace()
-        return data
+        for store in data['stores']:
+            store_data = StorageData(Name=store['displayName'],
+                                     Street=store['address']['streetname'],
+                                     Number=store['address']['streetnumber'],
+                                     Amount=store['stockInfo']['stockLevel'])
+            stores_summarized_data.append(store_data)
+
+        most_availability_store = max(stores_summarized_data, key=lambda store: int(store.Amount))
+        stores_summarized_data = [__get_store_tuple_text_summary(t) for t in stores_summarized_data]
+        item['storage_data'] = '\n'.join(stores_summarized_data)
+        item['most_availability_store'] = most_availability_store.Name
+        yield item
