@@ -3,10 +3,15 @@
 # See documentation in:
 # https://docs.scrapy.org/en/latest/topics/items.html
 
-import scrapy
+from scrapy.item import Item, Field
 
 
-class MarketscrapingItem(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
-    pass
+class Product(Item):
+    title = Field()
+    url = Field()
+    price = Field()
+    rating = Field()
+    images = Field()
+    table_values = Field()
+    storage_data = Field()
+    most_availability_store = Field()

@@ -1,5 +1,8 @@
 import scrapy
 import re
+
+from MarketScraping.items import Product
+
 from collections import namedtuple
 
 StorageData = namedtuple('StorageData', ['Name', 'Street', 'Number', 'Amount'])
@@ -36,14 +39,14 @@ class BrspiderSpider(scrapy.Spider):
         title = self.ensure_brand_in_the_title(title, table_values)
         product_code = re.search(r"\d+$", response.url).group()
 
-        item = {
-            "title": title,
-            "url": response.url,
-            "price": price,
-            "rating": rating,
-            **image_dict,
-            **table_values,
-        }
+        item = Product(
+            title=title,
+            url=response.url,
+            price=price,
+            rating=rating,
+            images=image_dict,
+            table_values=table_values
+        )
 
         yield scrapy.Request(
             url=self.build_storage_url(product_code),
