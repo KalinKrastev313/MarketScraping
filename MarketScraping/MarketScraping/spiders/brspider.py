@@ -60,10 +60,11 @@ class BrspiderSpider(scrapy.Spider):
 
     def get_images_urls_dict(self, response):
         image_urls = response.css(".swiper-slide img::attr(src)").getall()
-        return {
-            f"image{i + 1}": url
-            for i, url in enumerate(image_urls)
-        }
+        return image_urls
+        # return {
+        #     f"image{i + 1}": url
+        #     for i, url in enumerate(image_urls)
+        # }
 
     def get_price(self, response):
         price_base = (response.css(".product__price-value::text").get()).replace('\n', '').strip()
